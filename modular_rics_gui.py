@@ -1064,6 +1064,9 @@ class ModularRICSGUI:
                     with pyczi.open_czi(metadata_path) as czidoc:
                         Pixel_size_nm, Pixel_dwell_time_us, line_time_ms = im.get_metadata(czidoc)
                     self.log_message(f"Extracted metadata from {metadata_path}: px size={Pixel_size_nm}nm, dwell={Pixel_dwell_time_us}us, line time={line_time_ms}ms")
+                    pixel_size_um = float(Pixel_size_nm) * 1e-3
+                    pixel_time_s = float(Pixel_dwell_time_us) * 1e-6
+                    line_time_s = float(line_time_ms) * 1e-3
             else:
                 pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
                 pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
