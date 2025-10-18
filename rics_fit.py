@@ -393,6 +393,7 @@ def plot_fitting_workflow(image, model_diff, residual_diff, filepath):
     fig.savefig(os.path.splitext(filepath)[0] + '.svg', dpi=300)
 
 
+
 def plot_rics_1D_fit(fast_axis_data, model, residual, px_size_um, filepath=None):
     n_points = len(fast_axis_data)
     center = n_points // 2
@@ -424,74 +425,4 @@ def plot_rics_1D_fit(fast_axis_data, model, residual, px_size_um, filepath=None)
     plt.show()
 
 if __name__ == '__main__':  
-    # Processing  
-    files = get_files_from_folder(folder, file_extension, ending_word)
-    # Initialize results list
-    results = []
-    for filepath in files:
-        print("Processing: "+ str(filepath))
-    
-        # image reading and preprocessing
-        
-        
-        image = skio.imread(filepath)
-        
-        floor_fast_ax = int(np.floor(image.shape[1] * (1 - crop_factor_fast_ax) * 0.5))
-        ceil_fast_ax = int(np.floor(image.shape[1] * 0.5 * (1 + crop_factor_fast_ax)))
-        floor_slow_ax = int(np.floor(image.shape[0] * (1 - crop_factor_slow_ax) * 0.5))
-        ceil_slow_ax = int(np.floor(image.shape[0] * 0.5 * (1 + crop_factor_slow_ax)))
-        image = image[floor_slow_ax:ceil_slow_ax,
-                            floor_fast_ax:ceil_fast_ax]    
-        
-        center_y = image.shape[0] // 2
-        center_x = image.shape[1] // 2
-        image[center_y, center_x] = 0.0
-        
-        fitter = RICS_fit(image,
-                          pixel_size_um,
-                          pixel_time_s,
-                          line_time_s,
-                          psf_size_xy_um,
-                          psf_aspect_ratio)
-        
-        if diffusion_model == '3Ddiff':
-            fit_params_diff, model_diff, residual_diff = fitter.run_3Ddiff_fit()
-            N = 0.35 / fit_params_diff["amplitude"].value
-            D = fit_params_diff["diff_coeff"].value
-        elif diffusion_model == '2Ddiff':
-            fit_params_diff, model_diff, residual_diff = fitter.run_2Ddiff_fit()
-            N = 0.5 / fit_params_diff["amplitude"].value
-            D = fit_params_diff["diff_coeff"].value
-            
-            fit_params_1D_diff, model_1D_diff, residual_1D_diff = fitter.fast_axis_diff_fit()
-            D_1D = fit_params_1D_diff["diff_coeff"].value
-            
-        # Remove the central pixel of the residual similar to the image (otherwise it doesn't make any sense)
-        center_y = residual_diff.shape[0] // 2
-        center_x = residual_diff.shape[1] // 2
-        residual_diff[center_y, center_x] = 0.0
-        center_y_1D = residual_1D_diff.shape[0] // 2
-       
-        residual_1D_diff[center_y_1D] = 0.0
-    
-        # Plot 
-        plot_fitting_workflow(image, model_diff, residual_diff,filepath)
-        plot_rics_1D_fit(image[center_y,:], model_1D_diff, residual_1D_diff, px_size_um = 0.04, filepath=filepath)
-        # plot_rics_1D_fit(image[:,center_y_1D], model_1D_diff, residual_1D_diff, px_size_um = 0.04, filepath=None)
-    
-        # Results
-        # print('N = ' + str(N))
-        print('D = ' + str(D))
-        print('Dx = ' + str(D_1D))
-        results.append({'filepath': filepath,
-                        # 'Particle Number': N,
-                        'Diffusion Coefficient': D
-                        })
-    # After processing all files, convert to DataFrame and save once
-    results_df = pd.DataFrame(results)
-    
-    # Save CSV: you can name it with timestamp or run identifier for uniqueness
-    head, tail = os.path.split(filepath)
-    output_csv = os.path.join(head,'Results_'+diffusion_model+'.csv')
-    results_df.to_csv(output_csv, index=False)
-    print(f"Results saved to {output_csv}")
+    pass

@@ -16,6 +16,7 @@ import matplotlib.gridspec as gridspec
 import scipy.fftpack as fftpack
 from scipy.ndimage import gaussian_filter
 from scipy.signal import fftconvolve
+
 # File
 
 folder = r''
@@ -30,6 +31,7 @@ parallel_processing = False
 num_workers = 256
 correct_drift = False
 #%% Functions
+
 
 def get_files_from_folder(folder_path, extension, suffix):
     """
@@ -213,9 +215,7 @@ def process_all_frames_czi(filepath,
                        n_frames,
                        channel_to_use,
                        window_size = 3):
-    # Structure of function may be a bit weird, but this is historical as it 
-    # was written for parallel processing which turned out useless.
-    # Not elegently written, but it works well-enough.
+   
     all_frames = []
     for i_frame in range(n_frames):
         frame_data = read_frame(filepath, i_frame, channel_to_use)

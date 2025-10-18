@@ -17,7 +17,6 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import sv_ttk
 import numpy as np
-# import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import matplotlib.gridspec as gridspec
@@ -29,14 +28,13 @@ from threading import Thread
 import queue
 import tifffile
 from tqdm import tqdm
-
-# import sys
+import scipy.ndimage
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
-# from PIL import Image, ImageTk
 import simRICS
 import export_rics
 import rics_fit
-
+import random
 # Import your existing modules
 
 
@@ -51,6 +49,7 @@ class ModularRICSGUI:
         self.current_image_stack = None
         self.current_corrected_stack = None
         self.current_rics_map = None
+        self.diffusion_map = None
         self.current_sd_map = None
         self.simulated_stack = None
         self.fit_results = None
@@ -305,6 +304,7 @@ class ModularRICSGUI:
         )
         if filename:
             self.file_for_metadata.set(filename)
+            
 
     def create_fitting_tab(self):
         """Create the fitting tab using rics_fit module"""
@@ -329,7 +329,11 @@ class ModularRICSGUI:
         self.file_for_metadata = tk.StringVar()
         ttk.Entry(fit_params, textvariable=self.file_for_metadata, width=25).grid(row=row, column=1, pady=2)
         ttk.Button(fit_params, text="Browse", command=self.browse_metadata_file).grid(row=row, column=2, pady=2)
-
+        row +=1
+        ttk.Label(fit_params, text="Inout file for Diffusion Map").grid(row=row, column=0, sticky='w', pady=2)
+        self.input_file_diff_map = tk.StringVar()
+        ttk.Entry(fit_params, textvariable=self.input_file_diff_map, width=25).grid(row=row, column=1, pady=2)
+        ttk.Button(fit_params, text="Browse", command=self.browse_input_file_diff_map).grid(row=row, column=2, pady=2)
         # Microscope parameters
         row += 1
         ttk.Label(fit_params, text="Pixel size (nm):").grid(row=row, column=0, sticky='w', pady=2)
@@ -378,9 +382,10 @@ class ModularRICSGUI:
         # Fitting buttons
         row += 1
         fit_button_frame = ttk.Frame(fit_params)
-        fit_button_frame.grid(row=row, column=0, columnspan=2, pady=10)
+        fit_button_frame.grid(row=row, column=0, columnspan=3, pady=10)
         ttk.Button(fit_button_frame, text="Run 2D/3D Fitting", command=self.run_fitting).pack(side=tk.LEFT, padx=5)
         ttk.Button(fit_button_frame, text="1D Fast Axis Fit", command=self.run_1d_fitting).pack(side=tk.LEFT, padx=5)
+        ttk.Button(fit_button_frame, text="Generate Diffusion Map", command=self.run_diffusion_map).pack(side=tk.LEFT, padx=5)
 
         # Display frame for fitting results
         
@@ -399,7 +404,7 @@ class ModularRICSGUI:
     def create_results_tab(self):
         """Create the results and log tab"""
         results_frame = ttk.Frame(self.notebook)
-        self.notebook.add(results_frame, text="4. Results & Logs")
+        self.notebook.add(results_frame, text="Results & Logs")
 
         # Results text area
         results_label_frame = ttk.LabelFrame(results_frame, text="Analysis Results & Logs", padding=10)
@@ -443,11 +448,18 @@ class ModularRICSGUI:
         """Browse for input file"""
         filename = filedialog.askopenfilename(
             title="Select input image stack",
-            filetypes=[("TIFF files", "*.tif"), ("CZI files", "*.czi"), ("All files", "*.*")]
+            filetypes=[("All files", "*.*"), ("CZI files", "*.czi"),("TIFF files", "*.tif") ]
         )
         if filename:
             self.input_file.set(filename)
-
+    def browse_input_file_diff_map(self):
+        """Browse for input file"""
+        filename = filedialog.askopenfilename(
+            title="Select input image stack",
+            filetypes=[("All files", "*.*"), ("CZI files", "*.czi"),("TIFF files", "*.tif") ]
+        )
+        if filename:
+            self.input_file_diff_map.set(filename)
     def browse_rics_file(self):
         """Browse for RICS map file"""
         filename = filedialog.askopenfilename(
@@ -844,6 +856,8 @@ class ModularRICSGUI:
         export_thread.daemon = True
         export_thread.start()
 
+
+
     def _export_rics_thread(self):
         """Thread function for RICS export using your export_rics module"""
         try:
@@ -924,8 +938,13 @@ class ModularRICSGUI:
         finally:
             self.root.after(0, lambda: self.status_var.set("Ready"))
 
+    
+        
+
     def update_rics_display(self):
         """Update the RICS display using your plotting function"""
+
+
         if self.current_rics_map is not None:
             self.rics_fig.clear()
 
@@ -941,20 +960,24 @@ class ModularRICSGUI:
                 # The plot_rics_workflow function creates its own figure, so we need to recreate for our canvas
             except:
                 pass
-            crop_factor_fast_ax = 0.5
-            crop_factor_slow_ax = 0.5
-            floor_fast_ax = int(np.floor(self.current_rics_map.shape[1] * (1 - crop_factor_fast_ax) * 0.5))
-            ceil_fast_ax = int(np.floor(self.current_rics_map.shape[1] * 0.5 * (1 + crop_factor_fast_ax)))
-            floor_slow_ax = int(np.floor(self.current_rics_map.shape[0] * (1 - crop_factor_slow_ax) * 0.5))
-            ceil_slow_ax = int(np.floor(self.current_rics_map.shape[0] * 0.5 * (1 + crop_factor_slow_ax)))
-            self.current_rics_map = self.current_rics_map[floor_slow_ax:ceil_slow_ax,
-                                floor_fast_ax:ceil_fast_ax] 
-            self.current_sd_map = self.current_sd_map[floor_slow_ax:ceil_slow_ax,
-                                floor_fast_ax:ceil_fast_ax]
+
             center_y = self.current_rics_map.shape[0] // 2
             center_x = self.current_rics_map.shape[1] // 2
             self.current_rics_map[center_y, center_x] = 0.0
             self.current_sd_map[center_y, center_x] = 0.0
+
+
+            # crop_factor_fast_ax = 0.5
+            # crop_factor_slow_ax = 0.5
+            # floor_fast_ax = int(np.floor(self.current_rics_map.shape[1] * (1 - crop_factor_fast_ax) * 0.5))
+            # ceil_fast_ax = int(np.floor(self.current_rics_map.shape[1] * 0.5 * (1 + crop_factor_fast_ax)))
+            # floor_slow_ax = int(np.floor(self.current_rics_map.shape[0] * (1 - crop_factor_slow_ax) * 0.5))
+            # ceil_slow_ax = int(np.floor(self.current_rics_map.shape[0] * 0.5 * (1 + crop_factor_slow_ax)))
+            # self.cropped_rics_map = self.current_rics_map[floor_slow_ax:ceil_slow_ax,
+            #                     floor_fast_ax:ceil_fast_ax] 
+            # self.cropped_sd_map = self.current_sd_map[floor_slow_ax:ceil_slow_ax,
+            #                     floor_fast_ax:ceil_fast_ax]
+            
             # Create our own display
             gs = gridspec.GridSpec(2, 3, figure=self.rics_fig, width_ratios=[1, 1, 2])
 
@@ -995,6 +1018,8 @@ class ModularRICSGUI:
             ax5.set_title('RICS Map 3D')
             ax5.view_init(elev=20, azim=90)
 
+            
+            
         
             self.rics_canvas.draw()
 
@@ -1208,6 +1233,150 @@ class ModularRICSGUI:
         finally:
             self.root.after(0, lambda: self.status_var.set("Ready"))
 
+    def run_diffusion_map(self):
+        if not rics_fit:
+            messagebox.showerror("Error", "Fitting module not loaded!")
+            return
+
+        if not self.input_file_diff_map.get():
+            messagebox.showwarning("Warning", "Please select an input file first")
+            return
+
+        self.log_message("Starting Diff Map export...")
+        self.status_var.set("Exporting Diff Map...")
+        self.status_bar.update_idletasks()  # Force redraw
+
+        
+
+        # Create a thread for RICS export
+        export_thread = Thread(target=self._run_diffusion_map_thread)
+        export_thread.daemon = True
+        export_thread.start()
+        
+
+    def _run_diffusion_map_thread(self):
+        
+        try:
+
+            self.log_message("Generating diffusion map from current intensity stack...")
+            # Extract fitting parameters
+            if self.file_for_metadata.get():
+
+                import inspect_metadata as im  # ensure this import is available
+            
+                metadata_path = self.file_for_metadata.get()
+                if not os.path.isfile(metadata_path):
+                    self.log_message(f"Metadata file {metadata_path} not found. Using given parameters.")
+                    pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                    pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                    line_time_s = float(self.fit_line_time.get()) * 1e-3
+                else:
+                    with pyczi.open_czi(metadata_path) as czidoc:
+                        Pixel_size_nm, Pixel_dwell_time_us, line_time_ms = im.get_metadata(czidoc)
+                    self.log_message(f"Extracted metadata from {metadata_path}: px size={Pixel_size_nm}nm, dwell={Pixel_dwell_time_us}us, line time={line_time_ms}ms")
+                    pixel_size_um = float(Pixel_size_nm) * 1e-3
+                    pixel_time_s = float(Pixel_dwell_time_us) * 1e-6
+                    line_time_s = float(line_time_ms) * 1e-3
+            else:
+                pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                line_time_s = float(self.fit_line_time.get()) * 1e-3
+
+            
+            psf_size_xy_um = float(self.fit_psf_xy.get())
+            psf_aspect_ratio = float(self.fit_psf_aspect.get())
+            diffusion_model = self.diffusion_model.get()
+            all_frames = []
+            input_file_diff_map = self.input_file_diff_map.get()
+            with pyczi.open_czi(input_file_diff_map) as czidoc:
+                total_bounding_box = czidoc.total_bounding_box
+                n_frames = total_bounding_box['T'][1]
+            for i_frame in range(n_frames):
+                frame_data = export_rics.read_frame(self.input_file_diff_map.get(), i_frame, 0)
+                all_frames.append(frame_data)
+            stack = np.stack(all_frames, axis = 0)
+            Dmap, Nmap, Bmap = self.compute_local_diffusion_map(
+                stack, pixel_size_um, pixel_time_s, line_time_s,
+                psf_size_xy_um, psf_aspect_ratio, window_size=32, offset=16, model=diffusion_model, min_valid_pixels = 0.5, input_file_diff_map = input_file_diff_map
+            )
+            self.diffusion_map = Dmap
+            self.root.after(0, self.update_fitting_display)
+            diff_map_output = os.path.splitext(input_file_diff_map)[0] + '_diff_map.tif'
+            
+
+            tifffile.imwrite(diff_map_output, Dmap, photometric='minisblack')
+
+            
+            self.log_message(f"Diffusion map saved to: {diff_map_output}")
+            
+        except Exception as e:
+            self.log_message(f"Diffusion map error: {str(e)}")
+            import traceback
+            self.log_message(f"Traceback: {traceback.format_exc()}")
+        finally:
+            self.root.after(0, lambda: self.status_var.set("Ready"))
+
+    
+
+
+    def compute_local_diffusion_map(self, stack, pixelsize_um, pixeltime_s, linetime_s,
+                                psf_xy_um=0.2, psf_aspect=5.0,
+                                window_size=32, offset=16,
+                                model='2Ddiff', min_valid_pixels=0.5, input_file_diff_map = None):
+        """
+        Grid-based diffusion map from image stack, reproducing PAM grid fitting.
+        Each block of the image stack is fitted to return spatial maps of D, amplitude, and brightness.
+        """
+        h, w = stack.shape[-2:] # get the height and width of the image 
+        nx = (w - window_size) // offset + 1 # number of windows in x 
+        ny = (h - window_size) // offset + 1 # number of windows in y
+        Dmap = np.full((h, w), np.nan) # create NaN images with the same size
+        Nmap = np.full((h, w), np.nan)
+        Bmap = np.full((h, w), np.nan) 
+        block_args = []
+        for iy in range(ny):
+            for ix in range(nx):
+                y0 = iy * offset
+                x0 = ix * offset
+                block = stack[:, y0:y0+window_size, x0:x0+window_size]
+                block_args.append((
+                    block, y0, x0,
+                    pixelsize_um, pixeltime_s, linetime_s,
+                    psf_xy_um, psf_aspect, model, input_file_diff_map
+                ))
+        total = len(block_args)
+        # Start polling the progress queue in a separate thread to keep GUI responsive
+        # pool = multiprocessing.Pool(processes = multiprocessing.cpu_count())
+        # results = []
+        # for result in tqdm(pool.imap(process_block, block_args), total=total):
+        #     results.append(result)
+
+        # pool.close()
+        # pool.join()
+        # with multiprocessing.Pool(processes=10) as pool:
+        #     results = pool.imap_unordered(process_block, block_args)
+        results = []
+        for args in block_args:
+            result = process_block(args)  # Call the top-level worker function directly
+            results.append(result)    
+        
+        # Initialize output maps
+        Dmap = np.full((h, w), np.nan)
+        Nmap = np.full((h, w), np.nan)
+        Bmap = np.full((h, w), np.nan)
+        # Fill maps from results
+        for y0, x0, D, amp, brightness in results:
+            Dmap[y0:y0+window_size, x0:x0+window_size] = D
+            Nmap[y0:y0+window_size, x0:x0+window_size] = amp
+            Bmap[y0:y0+window_size, x0:x0+window_size] = brightness
+            
+        
+        Dmap = scipy.ndimage.median_filter(Dmap, size=3)
+        Nmap = scipy.ndimage.median_filter(Nmap, size=3)
+        Bmap = scipy.ndimage.median_filter(Bmap, size=3)
+
+        return Dmap, Nmap, Bmap
+
     def update_fitting_display(self):
         """Update the fitting results display using your plotting functions"""
         if self.fit_results is not None:
@@ -1228,10 +1397,10 @@ class ModularRICSGUI:
             # Create our own display matching your layout
             if 'model_1D' in self.fit_results:
                 # If 1D fit is available, show both 2D/3D and 1D results
-                gs = gridspec.GridSpec(3, 3, figure=self.fit_fig, width_ratios=[1, 1, 1], height_ratios=[1, 1, 1])
+                gs = gridspec.GridSpec(3, 4, figure=self.fit_fig, width_ratios=[1, 1, 1, 1], height_ratios=[1, 1, 1])
             else:
                 # Only 2D/3D results
-                gs = gridspec.GridSpec(2, 3, figure=self.fit_fig, width_ratios=[1, 1, 1])
+                gs = gridspec.GridSpec(2, 4, figure=self.fit_fig, width_ratios=[1, 1, 1, 1])
 
             # Create coordinate arrays for 3D plots
             X = np.arange(self.fit_results['rics_map'].shape[1])
@@ -1290,8 +1459,17 @@ class ModularRICSGUI:
                 ax5.legend()
                 ax5.grid(True, alpha=0.3)
 
+            if self.diffusion_map is not None:
+                ax6 = self.fit_fig.add_subplot(gs[0, 3])
+                im6 = ax6.imshow(self.diffusion_map, cmap='jet')
+                ax6.set_title("Diffusion Map")
+                ax6.axis('off')
+                self.fit_fig.colorbar(im6, ax=ax6, fraction=0.046, pad=0.04)
+
             self.fit_fig.tight_layout()
             self.fit_canvas.draw()
+
+    
 
     def save_results(self):
         """Save analysis results"""
@@ -1446,6 +1624,34 @@ def on_closing():
         root.destroy()
         root.quit()
     
+def process_block(args):
+        """
+        Worker function: processes one block and returns (y0, x0, D, amp)
+        """
+        block, y0, x0, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect, model, input_file_diff_map = args   
+        if np.count_nonzero(~np.isnan(block)) < 0.5 * block.size:
+            return (y0, x0, np.nan, np.nan, np.nan)
+
+        try:
+            # import rics_fit
+            RICS_map, sd_map, stack, corrected_stack = export_rics.process_all_frames_tiff(block, block.shape[0], 0, window_size = 3)
+            print("RICS_map")
+            i = random.randint(0,100)
+            tile_output = os.path.splitext(input_file_diff_map)[0] + str(i) + '_RICS_tile.tif'
+            print("saving")
+            tifffile.imwrite(tile_output, RICS_map, photometric='minisblack')
+            # fitter = rics_fit.RICS_fit(RICSmap, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect)
+            # if model == '3Ddiff':
+            #     params, modelmap, res = fitter.run_3Ddiff_fit()
+            # else:
+            #     params, modelmap, res = fitter.run_2Ddiff_fit()
+            # D = params['diff_coeff'].value
+            # amp = params['amplitude'].value
+            
+        except Exception:
+            D, amp = np.nan, np.nan
+        brightness = np.std(block)
+        return (y0, x0, D, amp, brightness)
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method('spawn')
@@ -1456,4 +1662,7 @@ if __name__ == "__main__":
     root.protocol("WM_DELETE_WINDOW", on_closing)
     app = ModularRICSGUI(root)
     root.mainloop()
+
+    
+
 
