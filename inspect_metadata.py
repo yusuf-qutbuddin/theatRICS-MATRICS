@@ -2,7 +2,7 @@
 """
 Created on Sun Dec 15 16:52:10 2024
 
-@author: yusufqq and Krohn
+@author: yusufqq
 """
 
 from pylibCZIrw import czi as pyczi

@@ -2,7 +2,7 @@
 """
 Created on Tue Dec 10 10:19:18 2024
 
-@author: yusufqq and Krohn
+@author: yusufqq (improved from a previous version of Krohn)
 """
 import os
 import skimage.io as skio
