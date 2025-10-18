@@ -37,11 +37,10 @@ import rics_fit
 import random
 # Import your existing modules
 
-
 class ModularRICSGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("theatRICS")
+        self.root.title("theatRICS/MATRICS")
         
         self.root.geometry("1400x900")
 
@@ -1316,7 +1315,38 @@ class ModularRICSGUI:
         finally:
             self.root.after(0, lambda: self.status_var.set("Ready"))
 
-    
+    def process_block(self, args):
+        """
+        Worker function: processes one block and returns (y0, x0, D, amp)
+        """
+        block, y0, x0, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect, model, input_file_diff_map = args   
+        if np.count_nonzero(~np.isnan(block)) < 0.5 * block.size:
+            print("is this happening")
+            return (y0, x0, np.nan, np.nan, np.nan)
+
+        try:
+            # import rics_fit
+            RICS_map, sd_map, stack, corrected_stack = export_rics.process_all_frames_tiff(block, block.shape[0], 0, window_size = 3)
+            
+            fitter = rics_fit.RICS_fit(RICS_map, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect)
+            if model == '3Ddiff':
+                params, modelmap, res = fitter.run_3Ddiff_fit()
+            else:
+                params, modelmap, res = fitter.run_2Ddiff_fit()
+            D = params['diff_coeff'].value
+            amp = params['amplitude'].value
+
+            # D = 0
+            # amp = 0
+            
+        except Exception as e:
+            import traceback
+            print("Exception in process_block:", e)
+            print(traceback.format_exc())
+            D, amp = np.nan, np.nan
+        brightness = np.std(block)
+        return (y0, x0, D, amp, brightness)
+
 
 
     def compute_local_diffusion_map(self, stack, pixelsize_um, pixeltime_s, linetime_s,
@@ -1340,7 +1370,7 @@ class ModularRICSGUI:
                 x0 = ix * offset
                 block = stack[:, y0:y0+window_size, x0:x0+window_size]
                 block_args.append((
-                    block, y0, x0,
+                    block.copy(), y0, x0,
                     pixelsize_um, pixeltime_s, linetime_s,
                     psf_xy_um, psf_aspect, model, input_file_diff_map
                 ))
@@ -1357,7 +1387,7 @@ class ModularRICSGUI:
         #     results = pool.imap_unordered(process_block, block_args)
         results = []
         for args in block_args:
-            result = process_block(args)  # Call the top-level worker function directly
+            result = self.process_block(args)  # Call the top-level worker function directly
             results.append(result)    
         
         # Initialize output maps
@@ -1381,6 +1411,7 @@ class ModularRICSGUI:
         """Update the fitting results display using your plotting functions"""
         if self.fit_results is not None:
             self.fit_fig.clear()
+            
 
             # Use your existing plotting function
             try:
@@ -1624,34 +1655,7 @@ def on_closing():
         root.destroy()
         root.quit()
     
-def process_block(args):
-        """
-        Worker function: processes one block and returns (y0, x0, D, amp)
-        """
-        block, y0, x0, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect, model, input_file_diff_map = args   
-        if np.count_nonzero(~np.isnan(block)) < 0.5 * block.size:
-            return (y0, x0, np.nan, np.nan, np.nan)
 
-        try:
-            # import rics_fit
-            RICS_map, sd_map, stack, corrected_stack = export_rics.process_all_frames_tiff(block, block.shape[0], 0, window_size = 3)
-            print("RICS_map")
-            i = random.randint(0,100)
-            tile_output = os.path.splitext(input_file_diff_map)[0] + str(i) + '_RICS_tile.tif'
-            print("saving")
-            tifffile.imwrite(tile_output, RICS_map, photometric='minisblack')
-            # fitter = rics_fit.RICS_fit(RICSmap, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect)
-            # if model == '3Ddiff':
-            #     params, modelmap, res = fitter.run_3Ddiff_fit()
-            # else:
-            #     params, modelmap, res = fitter.run_2Ddiff_fit()
-            # D = params['diff_coeff'].value
-            # amp = params['amplitude'].value
-            
-        except Exception:
-            D, amp = np.nan, np.nan
-        brightness = np.std(block)
-        return (y0, x0, D, amp, brightness)
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method('spawn')
