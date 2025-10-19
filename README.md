@@ -22,6 +22,9 @@ The current version has been tested to work through a conda environment with som
 
 **For Linux**: `conda env create --name <ENVNAME> --file environment_lin.yml`
 
+The software hasn't been tested for Mac but there is no particular reason why it shouldn't work. Once this test has been done, the environment file for Mac will also be uploaded. 
 
- 
+ ## Use
+
+ The use of the python package
 
