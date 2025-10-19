@@ -50,8 +50,7 @@ The current version has been tested to work through a conda environment with som
 
 **3. RICS fitting tab**
 
- The fitting tab requires information of the PSF and the imaging parameters (these parameters can also be provided by uploading a czi file directly). It also has a feature for getting diffusion maps where window size is 
- the smaller ROIs over which RICS export and fitting will take place, and the offset is the overlap between individual ROIs. Here the offset should always be less than the window size, preferably offset = 0.5*window_size.
+ The fitting tab requires information of the PSF and the imaging parameters (these parameters can also be provided by uploading a czi file directly). 
  
  ![Fitting tab](/screenshots/Fitting_tab.png)
 
