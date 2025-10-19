@@ -1,10 +1,8 @@
-**THE SOFTWARE IS STILL UNDER PROGRESS
-**
-
-**RICS Analysis GUI**
+The software is being actively developed and currently has basic functionalities available, in case of any issues please contact yusufqq@biochem.mpg.de.
+# Software for Raster Image Correlation Spectroscopy simulation and analysis
 A modular, extensible graphical user interface for performing and analyzing Raster Image Correlation Spectroscopy (RICS) experiments. This toolkit supports simulation, data import/export, and advanced analysis with a user-friendly workflow designed for membrane biophysics, imaging, and fluorescence correlation studies.
 
-**Features**
+## Features
 Flexible RICS simulations: Isotropic, anisotropic, and rotated diffusion models.
 
 Analysis: Fit and analyze real or simulated image stacks. (Non-GUI batch analysis)
