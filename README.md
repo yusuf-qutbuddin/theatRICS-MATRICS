@@ -33,8 +33,8 @@ The current version has been tested to work through a conda environment with som
 
  This should launch the GUI with the following tabs loaded. 
 
- 1. Simulation tab
-
+** 1. Simulation tab
+**
  The simulation tab contains the necessary parameters to use for simulating a raster scanned image for particles diffusing in 2D. 
  
  ![Simulation tab](/screenshots/Simulation_tab.png)
@@ -42,24 +42,22 @@ The current version has been tested to work through a conda environment with som
  The simulation can be run for isotropic and anisotropic diffusion. For isotropic case, choose the same diffusion coefficient for x and y. 
 
  
- 2. RICS export tab
-
+** 2. RICS export tab
+**
  The window size is necessary for moving average correction, and **must** be an odd number. 
  
  ![Export tab](/screenshots/Export_tab.png)
 
- 
- 
- 3. RICS fitting tab
-
+** 3. RICS fitting tab
+**
  The fitting tab requires information of the PSF and the imaging parameters (these parameters can also be provided by uploading a czi file directly). It also has a feature for getting diffusion maps where window size is 
- the smaller ROIs over which RICS export and fitting will take place, and the offset is the overlap between individual ROIs. Here the offset should always be less than the window size, preferably offset = 0.5*window size.
+ the smaller ROIs over which RICS export and fitting will take place, and the offset is the overlap between individual ROIs. Here the offset should always be less than the window size, preferably offset = 0.5*window_size.
  
  ![Fitting tab](/screenshots/Fitting_tab.png)
 
 
- 4. Results and log tab
-
+** 4. Results and log tab
+** 
  This is where the results and logging takes place. 
 
  
