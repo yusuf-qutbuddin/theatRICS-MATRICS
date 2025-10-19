@@ -17,7 +17,7 @@ A modular, extensible graphical user interface for performing and analyzing Rast
 ## Installation
 
 The current version has been tested to work through a conda environment with some necessary modules. You can use the environment.yaml file for setting up the environment. 
-conda env create --name <ENVNAME> --file environment.yml
-
+**For Windows**: `conda env create --name <ENVNAME> --file environment_win.yml`
+**For Linux**: `conda env create --name <ENVNAME> --file environment_lin.yml`
  
 
