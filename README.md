@@ -22,9 +22,27 @@ The current version has been tested to work through a conda environment with som
 
 **For Linux**: `conda env create --name <ENVNAME> --file environment_lin.yml`
 
-The software hasn't been tested for Mac but there is no particular reason why it shouldn't work. Once this test has been done, the environment file for Mac will also be uploaded. 
+ The software hasn't been tested for Mac but there is no particular reason why it shouldn't work. Once this test has been done, the environment file for Mac will also be uploaded. 
 
  ## Use
 
- The use of the python package
+ Follow the simple steps to use the GUI. 
+
+ 1. Activate the environment: `conda activate <ENVNAME>`
+ 2. Go to the correct installation directory and run `python theatRICS_gui.py`
+
+ This should launch the GUI with the following tabs loaded. 
+
+ 1. Simulation tab
+
+ The simulation tab contains the necessary parameters to use for simulating a raster scanned image for particles diffusing in 2D. 
+ ![Simulation tab](/screenshots/Simulation_tab.png)
+
+ 2. RICS export tab
+
+ 3. RICS fitting tab
+
+ 4. Results and log tab
+
+ 5. 
 
