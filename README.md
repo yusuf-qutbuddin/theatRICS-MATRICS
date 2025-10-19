@@ -38,9 +38,19 @@ The current version has been tested to work through a conda environment with som
  The simulation tab contains the necessary parameters to use for simulating a raster scanned image for particles diffusing in 2D. 
  ![Simulation tab](/screenshots/Simulation_tab.png)
 
- 2. RICS export tab
+ The simulation can be run for isotropic and anisotropic diffusion. For isotropic case, choose the same diffusion coefficient for x and y. 
 
+ 
+ 2. RICS export tab
+ 
+ ![Export tab](/screenshots/Export_tab.png)
+
+ 
+ 
  3. RICS fitting tab
+ 
+ ![Fitting tab](/screenshots/Fitting_tab.png)
+
 
  4. Results and log tab
 
