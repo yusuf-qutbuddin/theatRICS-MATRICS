@@ -16,7 +16,7 @@ Currently the software is limited to Zeiss (.czi) files and TIFF files for the i
 
 ## Installation
 
-The current version has been tested to work through a conda environment with some necessary modules. You can use the environment.yaml file for setting up the environment. 
+The current version has been tested to work through a conda environment with some necessary modules, you can also download anaconda [here]((https://www.anaconda.com/)). You can use the environment.yaml file for setting up the environment. 
 
 **For Windows**: `conda env create --name <ENVNAME> --file environment_win.yml`
 
