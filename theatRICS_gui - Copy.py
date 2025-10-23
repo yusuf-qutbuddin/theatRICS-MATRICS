@@ -39,7 +39,6 @@ import simRICS
 import export_rics
 import rics_fit
 import random
-import pandas as pd
 # Import your existing modules
 
 class ModularRICSGUI:
@@ -260,12 +259,10 @@ class ModularRICSGUI:
         ttk.Button(input_frame, text="Browse", command=self.browse_input_file).pack(side=tk.RIGHT)
 
         row += 1
-        ttk.Label(export_params, text="Input folder (batch analysis): ").grid(row=row, column=0, sticky='w', pady=2)
-        batch_input_frame = ttk.Frame(export_params)
-        batch_input_frame.grid(row=row, column=1, columnspan=2, pady=2, sticky='ew')
-        self.batch_input_folder = tk.StringVar()
-        ttk.Entry(batch_input_frame, textvariable=self.batch_input_folder, width=25).grid(row=row, column=1, pady=2)
-        ttk.Button(batch_input_frame, text="Browse", command=self.browse_batch_input_folder).grid(row=row, column=2, pady=2)
+        ttk.Label(fit_params, text="Input folder (batch analysis): ").grid(row=row, column=0, sticky='w', pady=2)
+        self.saving_path = tk.StringVar()
+        ttk.Entry(fit_params, textvariable=self.batch_input_folder, width=25).grid(row=row, column=1, pady=2)
+        ttk.Button(fit_params, text="Browse", command=self.browse_batch_input_folder).grid(row=row, column=2, pady=2)
 
         row += 1
         ttk.Label(export_params, text="Channel to use:").grid(row=row, column=0, sticky='w', pady=2)
@@ -526,7 +523,7 @@ class ModularRICSGUI:
         filepath = filedialog.askdirectory(
             title="Select directory for batch input",
         )
-        if filepath:
+        if filename:
             self.batch_input_folder.set(filepath)
 
     def browse_input_file_diff_map(self):
@@ -939,7 +936,7 @@ class ModularRICSGUI:
     def _export_rics_thread(self):
         """Thread function for RICS export using your export_rics module"""
         if not self.input_file.get():
-            files = get_files_from_folder(self.batch_input_folder.get(), '.czi', '')
+            files = get_files_from_folder(self.batch_input_folder, '.czi', '')
             for file in files:
                 try:
                     input_file = file
@@ -1090,12 +1087,12 @@ class ModularRICSGUI:
                     # Update display
                     self.root.after(0, self.update_rics_display)
 
-            except Exception as e:
-                self.log_message(f"RICS export error: {str(e)}")
-                import traceback
-                self.log_message(f"Traceback: {traceback.format_exc()}")
-            finally:
-                self.root.after(0, lambda: self.status_var.set("Ready"))
+                except Exception as e:
+                    self.log_message(f"RICS export error: {str(e)}")
+                    import traceback
+                    self.log_message(f"Traceback: {traceback.format_exc()}")
+                finally:
+                    self.root.after(0, lambda: self.status_var.set("Ready"))
 
 
     
