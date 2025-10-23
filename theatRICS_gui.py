@@ -20,6 +20,10 @@ import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt 
+import matplotlib
+matplotlib.use('agg')
+
 import tifffile
 from pylibCZIrw import czi as pyczi
 import multiprocessing
@@ -255,6 +259,12 @@ class ModularRICSGUI:
         ttk.Button(input_frame, text="Browse", command=self.browse_input_file).pack(side=tk.RIGHT)
 
         row += 1
+        ttk.Label(fit_params, text="Input folder (batch analysis): ").grid(row=row, column=0, sticky='w', pady=2)
+        self.saving_path = tk.StringVar()
+        ttk.Entry(fit_params, textvariable=self.batch_input_folder, width=25).grid(row=row, column=1, pady=2)
+        ttk.Button(fit_params, text="Browse", command=self.browse_batch_input_folder).grid(row=row, column=2, pady=2)
+
+        row += 1
         ttk.Label(export_params, text="Channel to use:").grid(row=row, column=0, sticky='w', pady=2)
         self.channel = tk.StringVar(value=0)
         model_combo = ttk.Combobox(export_params, textvariable=self.channel, 
@@ -345,6 +355,14 @@ class ModularRICSGUI:
         ttk.Label(diff_fit_params, text="Window Size (pixels):").grid(row=row, column=0, sticky='w', pady=2)
         self.window_size_diff_map = tk.StringVar(value="32")
         ttk.Entry(diff_fit_params, textvariable=self.window_size_diff_map, width=15).grid(row=row, column=1, pady=2)
+
+        row+=1
+        ttk.Label(fit_params, text="Results file:").grid(row=row, column=0, sticky='w', pady=2)
+        self.saving_path = tk.StringVar(value="./results_csv.csv")
+        ttk.Entry(fit_params, textvariable=self.saving_path, width=25).grid(row=row, column=1, pady=2)
+        ttk.Button(fit_params, text="Browse", command=self.browse_save_path).grid(row=row, column=2, pady=2)
+
+
         # Microscope parameters
         row += 1
         ttk.Label(fit_params, text="Pixel size (nm):").grid(row=row, column=0, sticky='w', pady=2)
@@ -493,6 +511,21 @@ class ModularRICSGUI:
         )
         if filename:
             self.input_file.set(filename)
+    def browse_save_path(self):
+        filename = filedialog.asksaveasfilename(
+            title="Select output file",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if filename:
+            self.saving_path.set(filename)
+    def browse_batch_input_folder(self):
+        filepath = filedialog.askdirectory(
+            title="Select directory for batch input",
+        )
+        if filename:
+            self.batch_input_folder.set(filepath)
+
     def browse_input_file_diff_map(self):
         """Browse for input file"""
         filename = filedialog.askopenfilename(
@@ -885,9 +918,10 @@ class ModularRICSGUI:
             messagebox.showerror("Error", "Export module not loaded!")
             return
 
-        if not self.input_file.get():
-            messagebox.showwarning("Warning", "Please select an input file first")
+        if not self.input_file.get() and not self.batch_input_folder.get():
+            messagebox.showwarning("Warning", "Please select an input file first or select a folder for batch processing")
             return
+
 
         self.log_message("Starting RICS export...")
         self.status_var.set("Exporting RICS...")
@@ -901,83 +935,165 @@ class ModularRICSGUI:
 
     def _export_rics_thread(self):
         """Thread function for RICS export using your export_rics module"""
-        try:
-            input_file = self.input_file.get()
-            channel = int(self.channel.get())
-            crop_factor = float(self.crop_factor.get())
-            window_size = int(self.window_size.get())
+        if not self.input_file.get():
+            files = get_files_from_folder(self.batch_input_folder, '.czi', '')
+            for file in files:
+                try:
+                    input_file = file
+                    channel = int(self.channel.get())
+                    crop_factor = float(self.crop_factor.get())
+                    window_size = int(self.window_size.get())
 
-            self.log_message(f"Processing file: {input_file}")
-            self.log_message(f"Channel: {channel}, Crop factor: {crop_factor}, Window size: {window_size}")
+                    self.log_message(f"Processing file: {input_file}")
+                    self.log_message(f"Channel: {channel}, Crop factor: {crop_factor}, Window size: {window_size}")
 
-            # # Temporarily modify the module's global variables
-            # original_channel = export_rics.channel_to_use
-            # original_crop = export_rics.crop_factor
-            # original_window = export_rics.window_size
-            # original_drift = export_rics.correct_drift
+                    # # Temporarily modify the module's global variables
+                    # original_channel = export_rics.channel_to_use
+                    # original_crop = export_rics.crop_factor
+                    # original_window = export_rics.window_size
+                    # original_drift = export_rics.correct_drift
 
-            export_rics.channel_to_use = channel
-            export_rics.crop_factor = crop_factor
-            export_rics.window_size = window_size
-            export_rics.correct_drift = self.correct_drift.get()
+                    export_rics.channel_to_use = channel
+                    export_rics.crop_factor = crop_factor
+                    export_rics.window_size = window_size
+                    export_rics.correct_drift = self.correct_drift.get()
 
-            # Process the file using your module's function
-            ext = os.path.splitext(input_file)[1].lower()
+                    # Process the file using your module's function
+                    ext = os.path.splitext(input_file)[1].lower()
 
-            if ext == '.czi':
-                from pylibCZIrw import czi as pyczi
-                with pyczi.open_czi(input_file) as czidoc:
-                    total_bounding_box = czidoc.total_bounding_box
-                    n_frames = total_bounding_box['T'][1]
+                    if ext == '.czi':
+                        from pylibCZIrw import czi as pyczi
+                        with pyczi.open_czi(input_file) as czidoc:
+                            total_bounding_box = czidoc.total_bounding_box
+                            n_frames = total_bounding_box['T'][1]
 
-                RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_czi(
-                    input_file, n_frames, channel, window_size
-                )
-            elif ext in ['.tif', '.tiff']:
-                stack = tifffile.imread(input_file)
-                cropped_img = export_rics.crop_center(stack, crop_factor=crop_factor)
-                n_frames = cropped_img.shape[0]
+                        RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_czi(
+                            input_file, n_frames, channel, window_size
+                        )
+                    elif ext in ['.tif', '.tiff']:
+                        stack = tifffile.imread(input_file)
+                        cropped_img = export_rics.crop_center(stack, crop_factor=crop_factor)
+                        n_frames = cropped_img.shape[0]
 
-                if self.correct_drift.get():
-                    cropped_img = export_rics.drift_correct(cropped_img)
+                        if self.correct_drift.get():
+                            cropped_img = export_rics.drift_correct(cropped_img)
 
-                RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_tiff(
-                    cropped_img, n_frames, channel, window_size
-                )
-            else:
-                raise ValueError(f"Unsupported file format: {ext}")
+                        RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_tiff(
+                            cropped_img, n_frames, channel, window_size
+                        )
+                    else:
+                        raise ValueError(f"Unsupported file format: {ext}")
 
-            # Store results
-            self.current_rics_map = RICS_map
-            self.current_sd_map = sd_map
-            self.current_image_stack = all_frames
-            self.current_corrected_stack = corrected_stack
-            # Save RICS maps
-            rics_output = os.path.splitext(input_file)[0] + '_RICScorr.tif'
-            sd_output = os.path.splitext(input_file)[0] + '_RICSunc.tif'
+                    # Store results
+                    self.current_rics_map = RICS_map
+                    self.current_sd_map = sd_map
+                    self.current_image_stack = all_frames
+                    self.current_corrected_stack = corrected_stack
+                    # Save RICS maps
+                    rics_output = os.path.splitext(input_file)[0] + '_RICScorr.tif'
+                    sd_output = os.path.splitext(input_file)[0] + '_RICSunc.tif'
 
-            tifffile.imwrite(rics_output, RICS_map, photometric='minisblack')
-            tifffile.imwrite(sd_output, sd_map, photometric='minisblack')
+                    tifffile.imwrite(rics_output, RICS_map, photometric='minisblack')
+                    tifffile.imwrite(sd_output, sd_map, photometric='minisblack')
 
-            self.log_message(f"RICS map saved to: {rics_output}")
-            self.log_message(f"Standard deviation map saved to: {sd_output}")
-            self.log_message(f"RICS map shape: {RICS_map.shape}")
+                    self.log_message(f"RICS map saved to: {rics_output}")
+                    self.log_message(f"Standard deviation map saved to: {sd_output}")
+                    self.log_message(f"RICS map shape: {RICS_map.shape}")
 
-            # # Restore original values
-            # export_rics.channel_to_use = original_channel
-            # export_rics.crop_factor = original_crop
-            # export_rics.window_size = original_window
-            # export_rics.correct_drift = original_drift
+                    # # Restore original values
+                    # export_rics.channel_to_use = original_channel
+                    # export_rics.crop_factor = original_crop
+                    # export_rics.window_size = original_window
+                    # export_rics.correct_drift = original_drift
 
-            # Update display
-            self.root.after(0, self.update_rics_display)
+                    # Update display
+                    self.root.after(0, self.update_rics_display)
 
-        except Exception as e:
-            self.log_message(f"RICS export error: {str(e)}")
-            import traceback
-            self.log_message(f"Traceback: {traceback.format_exc()}")
-        finally:
-            self.root.after(0, lambda: self.status_var.set("Ready"))
+                except Exception as e:
+                    self.log_message(f"RICS export error: {str(e)}")
+                    import traceback
+                    self.log_message(f"Traceback: {traceback.format_exc()}")
+                finally:
+                    self.root.after(0, lambda: self.status_var.set("Ready"))
+        elif self.input_file.get():
+            try:
+                    input_file = self.input_file.get()
+                    channel = int(self.channel.get())
+                    crop_factor = float(self.crop_factor.get())
+                    window_size = int(self.window_size.get())
+
+                    self.log_message(f"Processing file: {input_file}")
+                    self.log_message(f"Channel: {channel}, Crop factor: {crop_factor}, Window size: {window_size}")
+
+                    # # Temporarily modify the module's global variables
+                    # original_channel = export_rics.channel_to_use
+                    # original_crop = export_rics.crop_factor
+                    # original_window = export_rics.window_size
+                    # original_drift = export_rics.correct_drift
+
+                    export_rics.channel_to_use = channel
+                    export_rics.crop_factor = crop_factor
+                    export_rics.window_size = window_size
+                    export_rics.correct_drift = self.correct_drift.get()
+
+                    # Process the file using your module's function
+                    ext = os.path.splitext(input_file)[1].lower()
+
+                    if ext == '.czi':
+                        from pylibCZIrw import czi as pyczi
+                        with pyczi.open_czi(input_file) as czidoc:
+                            total_bounding_box = czidoc.total_bounding_box
+                            n_frames = total_bounding_box['T'][1]
+
+                        RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_czi(
+                            input_file, n_frames, channel, window_size
+                        )
+                    elif ext in ['.tif', '.tiff']:
+                        stack = tifffile.imread(input_file)
+                        cropped_img = export_rics.crop_center(stack, crop_factor=crop_factor)
+                        n_frames = cropped_img.shape[0]
+
+                        if self.correct_drift.get():
+                            cropped_img = export_rics.drift_correct(cropped_img)
+
+                        RICS_map, sd_map, all_frames, corrected_stack = export_rics.process_all_frames_tiff(
+                            cropped_img, n_frames, channel, window_size
+                        )
+                    else:
+                        raise ValueError(f"Unsupported file format: {ext}")
+
+                    # Store results
+                    self.current_rics_map = RICS_map
+                    self.current_sd_map = sd_map
+                    self.current_image_stack = all_frames
+                    self.current_corrected_stack = corrected_stack
+                    # Save RICS maps
+                    rics_output = os.path.splitext(input_file)[0] + '_RICScorr.tif'
+                    sd_output = os.path.splitext(input_file)[0] + '_RICSunc.tif'
+
+                    tifffile.imwrite(rics_output, RICS_map, photometric='minisblack')
+                    tifffile.imwrite(sd_output, sd_map, photometric='minisblack')
+
+                    self.log_message(f"RICS map saved to: {rics_output}")
+                    self.log_message(f"Standard deviation map saved to: {sd_output}")
+                    self.log_message(f"RICS map shape: {RICS_map.shape}")
+
+                    # # Restore original values
+                    # export_rics.channel_to_use = original_channel
+                    # export_rics.crop_factor = original_crop
+                    # export_rics.window_size = original_window
+                    # export_rics.correct_drift = original_drift
+
+                    # Update display
+                    self.root.after(0, self.update_rics_display)
+
+                except Exception as e:
+                    self.log_message(f"RICS export error: {str(e)}")
+                    import traceback
+                    self.log_message(f"Traceback: {traceback.format_exc()}")
+                finally:
+                    self.root.after(0, lambda: self.status_var.set("Ready"))
+
 
     
         
@@ -1186,22 +1302,42 @@ class ModularRICSGUI:
                 diffusion_coeff = fit_params['diff_coeff'].value
                 amplitude = fit_params['amplitude'].value
                 offset = fit_params['offset'].value
-
+                N = float(0.5 / amplitude)
                 self.log_message("2D Diffusion fitting results:")
                 self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
                 self.log_message(f"  Amplitude: {amplitude:.6f}")
                 self.log_message(f"  Offset: {offset:.6f}")
+                fit_results = []
+                fit_results.append({'filepath': self.input_file.get(),
+                        'Particle Number': N,
+                        'Diffusion Coefficient': diffusion_coeff,
+                        'residual': np.mean(residual)
+                        })
+                results_df = pd.DataFrame(fit_results)
+                output_csv = self.saving_path.get()
+                results_df.to_csv(output_csv, index=False, mode = 'a')
+                
 
             else:  # 3Ddiff
                 fit_params, model, residual = fitter.run_3Ddiff_fit()
                 diffusion_coeff = fit_params['diff_coeff'].value
                 amplitude = fit_params['amplitude'].value
                 offset = fit_params['offset'].value
+                N = float(0.35 / amplitude)
 
                 self.log_message("3D Diffusion fitting results:")
                 self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
                 self.log_message(f"  Amplitude: {amplitude:.6f}")
                 self.log_message(f"  Offset: {offset:.6f}")
+                fit_results = []
+                fit_results.append({'filepath': self.input_file.get(),
+                        'Particle Number': N,
+                        'Diffusion Coefficient': diffusion_coeff,
+                        'residual': np.mean(residual)
+                        })
+                results_df = pd.DataFrame(fit_results)
+                output_csv = self.saving_path.get()
+                results_df.to_csv(output_csv, index=False, mode = 'a')
 
             self.fit_results = {
                 'rics_map': rics_map,
@@ -1313,6 +1449,9 @@ class ModularRICSGUI:
             pixel_size_um = Pixel_size_nm * 1e-3
             pixel_time_s = Pixel_dwell_time_us * 1e-6
             line_time_s = line_time_ms * 1e-3
+            self.fit_pixel_size = Pixel_size_nm
+            self.fit_pixel_dwell = Pixel_dwell_time_us
+            self.fit_line_time = line_time_ms
             psf_size_xy_um = float(self.fit_psf_xy.get())
             psf_aspect_ratio = float(self.fit_psf_aspect.get())
             diffusion_model = self.diffusion_model.get()
@@ -1328,20 +1467,19 @@ class ModularRICSGUI:
             window_size_diff_map = int(self.window_size_diff_map.get())
             offset_diff_map = int(self.offset_diff_map.get())
 
-            Dmap, Nmap, Bmap = self.compute_local_diffusion_map(
+            Dmap, Nmap, Bmap, fast_axis_data_list, modelmap_fast_axis_list = self.compute_local_diffusion_map(
                 stack, pixel_size_um, pixel_time_s, line_time_s,
                 psf_size_xy_um, psf_aspect_ratio, window_size=window_size_diff_map, offset=offset_diff_map, model=diffusion_model, min_valid_pixels = 0.5, input_file_diff_map = input_file_diff_map
             )
             self.diffusion_map = Dmap
             self.B_map = Bmap
             self.N_map = Nmap
+            self.RICS_map_fast_axis_list = fast_axis_data_list
+            self.modelmap_fast_axis_list = modelmap_fast_axis_list
             self.root.after(0, self.update_fitting_display)
             diff_map_output = os.path.splitext(input_file_diff_map)[0] + '_diff_map.tif'
-            
-
             tifffile.imwrite(diff_map_output, Dmap, photometric='minisblack')
 
-            
             self.log_message(f"Diffusion map saved to: {diff_map_output}")
             
         except Exception as e:
@@ -1428,19 +1566,26 @@ class ModularRICSGUI:
         Dmap = np.full((h, w), np.nan)
         Nmap = np.full((h, w), np.nan)
         Bmap = np.full((h, w), np.nan)
+        RICS_map_fast_axis_list = []
+        modelmap_fast_axis_list = []
         # Fill maps from results
-        for y0, x0, D, amp, brightness in results:
+        for y0, x0, D, amp, brightness, RICS_map_fast_axis, modelmap_fast_axis in results:
 
             Dmap[y0:y0+window_size, x0:x0+window_size] = D
             Nmap[y0:y0+window_size, x0:x0+window_size] = amp
             Bmap[y0:y0+window_size, x0:x0+window_size] = brightness
-            
+            RICS_map_fast_axis_list.append(RICS_map_fast_axis)
+            modelmap_fast_axis_list.append(modelmap_fast_axis)
         
         Dmap = scipy.ndimage.median_filter(Dmap, size=3)
         Nmap = scipy.ndimage.median_filter(Nmap, size=3)
         Bmap = scipy.ndimage.median_filter(Bmap, size=3)
 
-        return Dmap, Nmap, Bmap
+        
+
+        
+
+        return Dmap, Nmap, Bmap, RICS_map_fast_axis_list, modelmap_fast_axis_list
 
     def update_fitting_display(self):
         """Update the fitting results display using your plotting functions"""
@@ -1540,7 +1685,7 @@ class ModularRICSGUI:
             self.fit_canvas.draw()
         elif self.diffusion_map is not None and self.B_map is not None and self.N_map is not None:
             self.fit_fig.clear()
-            gs = gridspec.GridSpec(1, 3, figure=self.fit_fig, width_ratios = [1,1,1])
+            gs = gridspec.GridSpec(2, 3, figure=self.fit_fig, width_ratios = [1,1,1])
 
             median_val = np.nanmedian(self.diffusion_map) # Calculate median of the diffusion map (excluding NaNs if present)
             # Define the range
@@ -1572,7 +1717,30 @@ class ModularRICSGUI:
             ax8.axis('off')
             self.fit_fig.colorbar(im8, ax=ax8, fraction=0.046, pad=0.04)
 
+            ax9 = self.fit_fig.add_subplot(gs[1, 1])
+            ax10 = self.fit_fig.add_subplot(gs[1, 2])
 
+            for i in range(len(self.RICS_map_fast_axis_list)):
+                fast_axis_data = self.RICS_map_fast_axis_list[i]
+                modelmap_fast_axis = self.modelmap_fast_axis_list[i]
+                n_points = len(fast_axis_data)
+                center = n_points // 2
+                x_lag = (np.arange(n_points) - center) * self.fit_pixel_size * 1e-3
+                
+                # Plot all datasets on the same set of axes
+                ax9.plot(x_lag, fast_axis_data, 'o-')
+                ax10.plot(x_lag, modelmap_fast_axis, '--')
+
+            
+            ax9.set_ylabel('Autocorrelation G(Δx)')
+            ax9.set_title('RICS 1D Autocorrelation (Fast Axis)')
+            # ax9.legend()
+            ax9.grid(True)
+
+            ax10.set_ylabel('Autocorrelation G(Δx)')
+            ax10.set_title('RICS Fit (Fast Axis)')
+            # ax10.legend()
+            ax10.grid(True)
 
 
             self.fit_fig.tight_layout()
@@ -1738,9 +1906,16 @@ def process_block(args):
         print("Some blocks were found invalid")
         return (y0, x0, np.nan, np.nan, np.nan)
 
+    
     try:
         # import rics_fit
         RICS_map, sd_map, stack, corrected_stack = export_rics.process_all_frames_tiff(block, block.shape[0], 0, window_size = 3)
+        center_slow_ax = RICS_map.shape[0] // 2
+        center_fast_ax = RICS_map.shape[1] // 2
+
+        RICS_map[center_slow_ax, center_fast_ax] = 0
+        RICS_map_fast_axis = RICS_map[center_slow_ax,:]
+
         
         fitter = rics_fit.RICS_fit(RICS_map, pixelsize_um, pixeltime_s, linetime_s, psf_xy_um, psf_aspect)
         if model == '3Ddiff':
@@ -1750,6 +1925,7 @@ def process_block(args):
         D = params['diff_coeff'].value
         amp = params['amplitude'].value
 
+        modelmap_fast_axis = modelmap[center_slow_ax,:]
         # D = 0
         # amp = 0
         
@@ -1759,8 +1935,20 @@ def process_block(args):
         print(traceback.format_exc())
         D, amp = np.nan, np.nan
     brightness = np.std(block)
-    return (y0, x0, D, amp, brightness)
+    return (y0, x0, D, amp, brightness, RICS_map_fast_axis, modelmap_fast_axis)
 
+def get_files_from_folder(folder_path, extension, suffix):
+    """
+    Return a list of full file paths in 'folder_path' with the given 'extension'.
+    extension should include the dot, e.g., '.tif' or '.czi'
+    """
+    all_files = os.listdir(folder_path)
+    filtered_files = []
+    for f in all_files:
+        fname, ext = os.path.splitext(f)
+        if ext.lower() == extension.lower() and fname.lower().endswith(suffix.lower()):
+            filtered_files.append(os.path.join(folder_path, f))
+    return filtered_files
 def on_closing():
     if tk.messagebox.askokcancel("Quit", "Do you want to quit?"):
         root.destroy()
