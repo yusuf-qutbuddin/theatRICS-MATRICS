@@ -1353,7 +1353,7 @@ class ModularRICSGUI:
                 'fitter': fitter,
                 'model_type': diffusion_model
             }
-
+            self.current_rics_map = None # reset the RICS map
             # Update display
             self.root.after(0, self.update_fitting_display)
 
