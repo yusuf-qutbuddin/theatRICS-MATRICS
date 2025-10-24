@@ -351,10 +351,12 @@ class ModularRICSGUI:
 
         # parameters from a czi file
         row +=1
-        ttk.Label(fit_params, text="Metadata CZI file (optional):").grid(row=row, column=0, sticky='w', pady=2)
-        self.file_for_metadata = tk.StringVar()
-        ttk.Entry(fit_params, textvariable=self.file_for_metadata, width=25).grid(row=row, column=1, pady=2)
-        ttk.Button(fit_params, text="Browse", command=self.browse_metadata_file).grid(row=row, column=2, pady=2)
+        ttk.Label(fit_params, text="Input folder (batch analysis): ").grid(row=row, column=0, sticky='w', pady=2)
+        batch_fit_frame = ttk.Frame(fit_params)
+        batch_fit_frame.grid(row=row, column=1, columnspan=2, pady=2, sticky='ew')
+        self.batch_fit_folder = tk.StringVar()
+        ttk.Entry(batch_fit_frame, textvariable=self.batch_fit_folder, width=25).grid(row=row, column=1, pady=2)
+        ttk.Button(batch_fit_frame, text="Browse", command=self.browse_batch_fit_folder).grid(row=row, column=2, pady=2)
         ttk.Label(diff_fit_params, text="Window Size (pixels):").grid(row=row, column=0, sticky='w', pady=2)
         self.window_size_diff_map = tk.StringVar(value="32")
         ttk.Entry(diff_fit_params, textvariable=self.window_size_diff_map, width=15).grid(row=row, column=1, pady=2)
@@ -528,6 +530,13 @@ class ModularRICSGUI:
         )
         if filepath:
             self.batch_input_folder.set(filepath)
+
+    def browse_batch_fit_folder(self):
+        filepath = filedialog.askdirectory(
+            title="Select directory for batch input",
+        )
+        if filepath:
+            self.batch_fit_folder.set(filepath)
 
     def browse_input_file_diff_map(self):
         """Browse for input file"""
@@ -1212,7 +1221,7 @@ class ModularRICSGUI:
             messagebox.showerror("Error", "Fitting module not loaded!")
             return
 
-        if not self.rics_file.get() and self.current_rics_map is None:
+        if not self.rics_file.get() and not self.batch_fit_folder.get():
             messagebox.showwarning("Warning", "Please load a RICS map first")
             return
 
@@ -1226,143 +1235,289 @@ class ModularRICSGUI:
 
     def _run_fitting_thread(self):
         """Thread function for fitting using your rics_fit module"""
-        try:
-            # Load RICS map if needed
-            if self.current_rics_map is None and self.rics_file.get():
-                self.current_rics_map = tifffile.imread(self.rics_file.get())
-                self.log_message(f"Loaded RICS map for fitting: {self.rics_file.get()}")
+        if not self.rics_file.get() and self.batch_fit_folder.get():
+            files = get_files_from_folder(self.batch_fit_folder.get(), '.tif', 'RICScorr')
+            for file in files:
+                try:
+                    # Load RICS map if needed
+                    
+                    import os
+                    self.current_rics_map = tifffile.imread(file)
+                    self.log_message(f"Loaded RICS map for fitting: {file}")
+                    root, ext = os.path.splitext(file)
+                    metadata_file = os.path.split(root)[1].split('_')[0] + '.czi'
+                    metadata_path = os.path.join(os.path.split(root)[0], metadata_file)
+                    if self.current_rics_map is None:
+                        raise ValueError("No RICS map available for fitting")
 
-            if self.current_rics_map is None:
-                raise ValueError("No RICS map available for fitting")
+                    # Extract fitting parameters
+                    if metadata_path:
+                        import inspect_metadata as im  # ensure this import is available
+                    
+                        if not os.path.isfile(metadata_path):
+                            self.log_message(f"Metadata file {metadata_path} not found. Using given parameters.")
+                            pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                            pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                            line_time_s = float(self.fit_line_time.get()) * 1e-3
+                        else:
+                            channel_to_use = int(self.channel_to_use.get())
+                            with pyczi.open_czi(metadata_path) as czidoc:
+                                Pixel_size_nm, Pixel_dwell_time_us, line_time_ms = im.get_metadata(czidoc, channel_to_use)
+                            self.log_message(f"Extracted metadata from {metadata_path}: px size={Pixel_size_nm}nm, dwell={Pixel_dwell_time_us}us, line time={line_time_ms}ms")
+                            pixel_size_um = float(Pixel_size_nm) * 1e-3
+                            pixel_time_s = float(Pixel_dwell_time_us) * 1e-6
+                            line_time_s = float(line_time_ms) * 1e-3
+                    else:
+                        pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                        pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                        line_time_s = float(self.fit_line_time.get()) * 1e-3
 
-            # Extract fitting parameters
-            if self.file_for_metadata.get():
-                import inspect_metadata as im  # ensure this import is available
-            
-                metadata_path = self.file_for_metadata.get()
-                if not os.path.isfile(metadata_path):
-                    self.log_message(f"Metadata file {metadata_path} not found. Using given parameters.")
-                    pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
-                    pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
-                    line_time_s = float(self.fit_line_time.get()) * 1e-3
-                else:
-                    channel_to_use = int(self.channel_to_use.get())
-                    with pyczi.open_czi(metadata_path) as czidoc:
-                        Pixel_size_nm, Pixel_dwell_time_us, line_time_ms = im.get_metadata(czidoc, channel_to_use)
-                    self.log_message(f"Extracted metadata from {metadata_path}: px size={Pixel_size_nm}nm, dwell={Pixel_dwell_time_us}us, line time={line_time_ms}ms")
-                    pixel_size_um = float(Pixel_size_nm) * 1e-3
-                    pixel_time_s = float(Pixel_dwell_time_us) * 1e-6
-                    line_time_s = float(line_time_ms) * 1e-3
-            else:
-                pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
-                pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
-                line_time_s = float(self.fit_line_time.get()) * 1e-3
+                    
+                    psf_size_xy_um = float(self.fit_psf_xy.get())
+                    psf_aspect_ratio = float(self.fit_psf_aspect.get())
+                    diffusion_model = self.diffusion_model.get()
 
-            
-            psf_size_xy_um = float(self.fit_psf_xy.get())
-            psf_aspect_ratio = float(self.fit_psf_aspect.get())
-            diffusion_model = self.diffusion_model.get()
+                    self.log_message(f"Fitting parameters:")
+                    self.log_message(f"  Pixel size: {pixel_size_um*1000:.1f} nm")
+                    self.log_message(f"  Pixel dwell time: {pixel_time_s*1e6:.1f} μs")
+                    self.log_message(f"  Line time: {line_time_s*1e3:.1f} ms")
+                    self.log_message(f"  PSF size XY: {psf_size_xy_um:.3f} μm")
+                    self.log_message(f"  Model: {diffusion_model}")
 
-            self.log_message(f"Fitting parameters:")
-            self.log_message(f"  Pixel size: {pixel_size_um*1000:.1f} nm")
-            self.log_message(f"  Pixel dwell time: {pixel_time_s*1e6:.1f} μs")
-            self.log_message(f"  Line time: {line_time_s*1e3:.1f} ms")
-            self.log_message(f"  PSF size XY: {psf_size_xy_um:.3f} μm")
-            self.log_message(f"  Model: {diffusion_model}")
+                    # Crop RICS map according to settings
+                    rics_map = self.current_rics_map
+                    crop_fast = float(self.fit_crop_fast.get())
+                    crop_slow = float(self.fit_crop_slow.get())
 
-            # Crop RICS map according to settings
-            rics_map = self.current_rics_map.copy()
-            crop_fast = float(self.fit_crop_fast.get())
-            crop_slow = float(self.fit_crop_slow.get())
+                    floor_fast_ax = int(np.floor(rics_map.shape[1] * (1 - crop_fast) * 0.5))
+                    ceil_fast_ax = int(np.floor(rics_map.shape[1] * 0.5 * (1 + crop_fast)))
+                    floor_slow_ax = int(np.floor(rics_map.shape[0] * (1 - crop_slow) * 0.5))
+                    ceil_slow_ax = int(np.floor(rics_map.shape[0] * 0.5 * (1 + crop_slow)))
 
-            floor_fast_ax = int(np.floor(rics_map.shape[1] * (1 - crop_fast) * 0.5))
-            ceil_fast_ax = int(np.floor(rics_map.shape[1] * 0.5 * (1 + crop_fast)))
-            floor_slow_ax = int(np.floor(rics_map.shape[0] * (1 - crop_slow) * 0.5))
-            ceil_slow_ax = int(np.floor(rics_map.shape[0] * 0.5 * (1 + crop_slow)))
+                    rics_map = rics_map[floor_slow_ax:ceil_slow_ax, floor_fast_ax:ceil_fast_ax]
 
-            rics_map = rics_map[floor_slow_ax:ceil_slow_ax, floor_fast_ax:ceil_fast_ax]
+                    # Zero center pixel
+                    center_y = rics_map.shape[0] // 2
+                    center_x = rics_map.shape[1] // 2
+                    rics_map[center_y, center_x] = 0.0
 
-            # Zero center pixel
-            center_y = rics_map.shape[0] // 2
-            center_x = rics_map.shape[1] // 2
-            rics_map[center_y, center_x] = 0.0
+                    self.log_message(f"Cropped RICS map shape: {rics_map.shape}")
 
-            self.log_message(f"Cropped RICS map shape: {rics_map.shape}")
+                    # Create RICS fitter using your module
+                    fitter = rics_fit.RICS_fit(
+                        RICS_map=rics_map,
+                        pixel_size_um=pixel_size_um,
+                        pixel_time_s=pixel_time_s,
+                        line_time_s=line_time_s,
+                        psf_size_xy_um=psf_size_xy_um,
+                        psf_aspect_ratio=psf_aspect_ratio
+                    )
 
-            # Create RICS fitter using your module
-            fitter = rics_fit.RICS_fit(
-                RICS_map=rics_map,
-                pixel_size_um=pixel_size_um,
-                pixel_time_s=pixel_time_s,
-                line_time_s=line_time_s,
-                psf_size_xy_um=psf_size_xy_um,
-                psf_aspect_ratio=psf_aspect_ratio
-            )
+                    # Run fitting based on model choice
+                    if diffusion_model == "2Ddiff":
+                        fit_params, model, residual = fitter.run_2Ddiff_fit()
+                        diffusion_coeff = fit_params['diff_coeff'].value
+                        amplitude = fit_params['amplitude'].value
+                        offset = fit_params['offset'].value
+                        N = float(0.5 / amplitude)
+                        self.log_message("2D Diffusion fitting results:")
+                        self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
+                        self.log_message(f"  Amplitude: {amplitude:.6f}")
+                        self.log_message(f"  Offset: {offset:.6f}")
+                        fit_results = []
+                        fit_results.append({'filepath': file,
+                                'Particle Number': N,
+                                'Diffusion Coefficient': diffusion_coeff,
+                                'residual': np.mean(residual)
+                                })
+                        results_df = pd.DataFrame(fit_results)
+                        output_csv = self.saving_path.get()
+                        results_df.to_csv(output_csv, index=False, mode = 'a')
+                        
 
-            # Run fitting based on model choice
-            if diffusion_model == "2Ddiff":
-                fit_params, model, residual = fitter.run_2Ddiff_fit()
-                diffusion_coeff = fit_params['diff_coeff'].value
-                amplitude = fit_params['amplitude'].value
-                offset = fit_params['offset'].value
-                N = float(0.5 / amplitude)
-                self.log_message("2D Diffusion fitting results:")
-                self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
-                self.log_message(f"  Amplitude: {amplitude:.6f}")
-                self.log_message(f"  Offset: {offset:.6f}")
-                fit_results = []
-                fit_results.append({'filepath': self.input_file.get(),
-                        'Particle Number': N,
-                        'Diffusion Coefficient': diffusion_coeff,
-                        'residual': np.mean(residual)
-                        })
-                results_df = pd.DataFrame(fit_results)
-                output_csv = self.saving_path.get()
-                results_df.to_csv(output_csv, index=False, mode = 'a')
-                
+                    else:  # 3Ddiff
+                        fit_params, model, residual = fitter.run_3Ddiff_fit()
+                        diffusion_coeff = fit_params['diff_coeff'].value
+                        amplitude = fit_params['amplitude'].value
+                        offset = fit_params['offset'].value
+                        N = float(0.35 / amplitude)
 
-            else:  # 3Ddiff
-                fit_params, model, residual = fitter.run_3Ddiff_fit()
-                diffusion_coeff = fit_params['diff_coeff'].value
-                amplitude = fit_params['amplitude'].value
-                offset = fit_params['offset'].value
-                N = float(0.35 / amplitude)
+                        self.log_message("3D Diffusion fitting results:")
+                        self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
+                        self.log_message(f"  Amplitude: {amplitude:.6f}")
+                        self.log_message(f"  Offset: {offset:.6f}")
+                        fit_results = []
+                        fit_results.append({'filepath': file,
+                                'Particle Number': N,
+                                'Diffusion Coefficient': diffusion_coeff,
+                                'residual': np.mean(residual)
+                                })
+                        results_df = pd.DataFrame(fit_results)
+                        output_csv = self.saving_path.get()
+                        results_df.to_csv(output_csv, index=False, mode = 'a')
 
-                self.log_message("3D Diffusion fitting results:")
-                self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
-                self.log_message(f"  Amplitude: {amplitude:.6f}")
-                self.log_message(f"  Offset: {offset:.6f}")
-                fit_results = []
-                fit_results.append({'filepath': self.input_file.get(),
-                        'Particle Number': N,
-                        'Diffusion Coefficient': diffusion_coeff,
-                        'residual': np.mean(residual)
-                        })
-                results_df = pd.DataFrame(fit_results)
-                output_csv = self.saving_path.get()
-                results_df.to_csv(output_csv, index=False, mode = 'a')
+                    self.fit_results = {
+                        'rics_map': rics_map,
+                        'model': model,
+                        'residual': residual,
+                        'diffusion_coeff': diffusion_coeff,
+                        'amplitude': amplitude,
+                        'offset': offset,
+                        'fit_params': fit_params,
+                        'fitter': fitter,
+                        'model_type': diffusion_model
+                    }
+                    self.current_rics_map = None # reset the RICS map
+                    # Update display
+                    self.root.after(0, self.update_fitting_display)
 
-            self.fit_results = {
-                'rics_map': rics_map,
-                'model': model,
-                'residual': residual,
-                'diffusion_coeff': diffusion_coeff,
-                'amplitude': amplitude,
-                'offset': offset,
-                'fit_params': fit_params,
-                'fitter': fitter,
-                'model_type': diffusion_model
-            }
-            self.current_rics_map = None # reset the RICS map
-            # Update display
-            self.root.after(0, self.update_fitting_display)
+                except Exception as e:
+                    self.log_message(f"Fitting error: {str(e)}")
+                    import traceback
+                    self.log_message(f"Traceback: {traceback.format_exc()}")
+                finally:
+                    self.root.after(0, lambda: self.status_var.set("Ready"))
+        elif self.rics_file.get():
+            file = self.rics_file.get()
+            try:
+                    # Load RICS map if needed
+                    
+                    import os
+                    self.current_rics_map = tifffile.imread(file)
+                    self.log_message(f"Loaded RICS map for fitting: {file}")
+                    root, ext = os.path.splitext(file)
+                    metadata_file = os.path.split(root)[1].split('_')[0] + '.czi'
+                    metadata_path = os.path.join(os.path.split(root)[0], metadata_file)
+                    if self.current_rics_map is None:
+                        raise ValueError("No RICS map available for fitting")
 
-        except Exception as e:
-            self.log_message(f"Fitting error: {str(e)}")
-            import traceback
-            self.log_message(f"Traceback: {traceback.format_exc()}")
-        finally:
-            self.root.after(0, lambda: self.status_var.set("Ready"))
+                    # Extract fitting parameters
+                    if metadata_path:
+                        import inspect_metadata as im  # ensure this import is available
+                    
+                        if not os.path.isfile(metadata_path):
+                            self.log_message(f"Metadata file {metadata_path} not found. Using given parameters.")
+                            pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                            pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                            line_time_s = float(self.fit_line_time.get()) * 1e-3
+                        else:
+                            channel_to_use = int(self.channel_to_use.get())
+                            with pyczi.open_czi(metadata_path) as czidoc:
+                                Pixel_size_nm, Pixel_dwell_time_us, line_time_ms = im.get_metadata(czidoc, channel_to_use)
+                            self.log_message(f"Extracted metadata from {metadata_path}: px size={Pixel_size_nm}nm, dwell={Pixel_dwell_time_us}us, line time={line_time_ms}ms")
+                            pixel_size_um = float(Pixel_size_nm) * 1e-3
+                            pixel_time_s = float(Pixel_dwell_time_us) * 1e-6
+                            line_time_s = float(line_time_ms) * 1e-3
+                    else:
+                        pixel_size_um = float(self.fit_pixel_size.get()) * 1e-3
+                        pixel_time_s = float(self.fit_pixel_dwell.get()) * 1e-6
+                        line_time_s = float(self.fit_line_time.get()) * 1e-3
+
+                    
+                    psf_size_xy_um = float(self.fit_psf_xy.get())
+                    psf_aspect_ratio = float(self.fit_psf_aspect.get())
+                    diffusion_model = self.diffusion_model.get()
+
+                    self.log_message(f"Fitting parameters:")
+                    self.log_message(f"  Pixel size: {pixel_size_um*1000:.1f} nm")
+                    self.log_message(f"  Pixel dwell time: {pixel_time_s*1e6:.1f} μs")
+                    self.log_message(f"  Line time: {line_time_s*1e3:.1f} ms")
+                    self.log_message(f"  PSF size XY: {psf_size_xy_um:.3f} μm")
+                    self.log_message(f"  Model: {diffusion_model}")
+
+                    # Crop RICS map according to settings
+                    rics_map = self.current_rics_map
+                    crop_fast = float(self.fit_crop_fast.get())
+                    crop_slow = float(self.fit_crop_slow.get())
+
+                    floor_fast_ax = int(np.floor(rics_map.shape[1] * (1 - crop_fast) * 0.5))
+                    ceil_fast_ax = int(np.floor(rics_map.shape[1] * 0.5 * (1 + crop_fast)))
+                    floor_slow_ax = int(np.floor(rics_map.shape[0] * (1 - crop_slow) * 0.5))
+                    ceil_slow_ax = int(np.floor(rics_map.shape[0] * 0.5 * (1 + crop_slow)))
+
+                    rics_map = rics_map[floor_slow_ax:ceil_slow_ax, floor_fast_ax:ceil_fast_ax]
+
+                    # Zero center pixel
+                    center_y = rics_map.shape[0] // 2
+                    center_x = rics_map.shape[1] // 2
+                    rics_map[center_y, center_x] = 0.0
+
+                    self.log_message(f"Cropped RICS map shape: {rics_map.shape}")
+
+                    # Create RICS fitter using your module
+                    fitter = rics_fit.RICS_fit(
+                        RICS_map=rics_map,
+                        pixel_size_um=pixel_size_um,
+                        pixel_time_s=pixel_time_s,
+                        line_time_s=line_time_s,
+                        psf_size_xy_um=psf_size_xy_um,
+                        psf_aspect_ratio=psf_aspect_ratio
+                    )
+
+                    # Run fitting based on model choice
+                    if diffusion_model == "2Ddiff":
+                        fit_params, model, residual = fitter.run_2Ddiff_fit()
+                        diffusion_coeff = fit_params['diff_coeff'].value
+                        amplitude = fit_params['amplitude'].value
+                        offset = fit_params['offset'].value
+                        N = float(0.5 / amplitude)
+                        self.log_message("2D Diffusion fitting results:")
+                        self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
+                        self.log_message(f"  Amplitude: {amplitude:.6f}")
+                        self.log_message(f"  Offset: {offset:.6f}")
+                        fit_results = []
+                        fit_results.append({'filepath': file,
+                                'Particle Number': N,
+                                'Diffusion Coefficient': diffusion_coeff,
+                                'residual': np.mean(residual)
+                                })
+                        results_df = pd.DataFrame(fit_results)
+                        output_csv = self.saving_path.get()
+                        results_df.to_csv(output_csv, index=False, mode = 'a')
+                        
+
+                    else:  # 3Ddiff
+                        fit_params, model, residual = fitter.run_3Ddiff_fit()
+                        diffusion_coeff = fit_params['diff_coeff'].value
+                        amplitude = fit_params['amplitude'].value
+                        offset = fit_params['offset'].value
+                        N = float(0.35 / amplitude)
+
+                        self.log_message("3D Diffusion fitting results:")
+                        self.log_message(f"  Diffusion coefficient: {diffusion_coeff:.3f} μm²/s")
+                        self.log_message(f"  Amplitude: {amplitude:.6f}")
+                        self.log_message(f"  Offset: {offset:.6f}")
+                        fit_results = []
+                        fit_results.append({'filepath': file,
+                                'Particle Number': N,
+                                'Diffusion Coefficient': diffusion_coeff,
+                                'residual': np.mean(residual)
+                                })
+                        results_df = pd.DataFrame(fit_results)
+                        output_csv = self.saving_path.get()
+                        results_df.to_csv(output_csv, index=False, mode = 'a')
+
+                    self.fit_results = {
+                        'rics_map': rics_map,
+                        'model': model,
+                        'residual': residual,
+                        'diffusion_coeff': diffusion_coeff,
+                        'amplitude': amplitude,
+                        'offset': offset,
+                        'fit_params': fit_params,
+                        'fitter': fitter,
+                        'model_type': diffusion_model
+                    }
+                    self.current_rics_map = None # reset the RICS map
+                    # Update display
+                    self.root.after(0, self.update_fitting_display)
+
+            except Exception as e:
+                self.log_message(f"Fitting error: {str(e)}")
+                import traceback
+                self.log_message(f"Traceback: {traceback.format_exc()}")
+            finally:
+                self.root.after(0, lambda: self.status_var.set("Ready"))
 
     def run_1d_fitting(self):
         """Run 1D fitting on fast axis using your module"""
@@ -1546,24 +1701,12 @@ class ModularRICSGUI:
         pool = multiprocessing.Pool(processes = multiprocessing.cpu_count())
         results = []
         i = 0
-        for result in tqdm(pool.imap(process_block, block_args), total=total):
+        for result in tqdm(pool.imap(process_block_diff_map, block_args), total=total):
             results.append(result)
             i+=1
             progress = (i/total)*100
             self.progress_queue.put(progress)
 
-
-
-
-        
-        # pool.close()
-        # pool.join()
-        # with multiprocessing.Pool(processes=10) as pool:
-        #     results = pool.imap_unordered(process_block, block_args)
-        # results = []
-        # for args in block_args:
-        #     result = process_block(args)  # Call the top-level worker function directly
-        #     results.append(result)    
         
         # Initialize output maps
         Dmap = np.full((h, w), np.nan)
@@ -1900,7 +2043,7 @@ class ModularRICSGUI:
                 messagebox.showerror("Error", f"Could not export plots: {str(e)}")
 
 
-def process_block(args):
+def process_block_diff_map(args):
     """
     Worker function: processes one block and returns (y0, x0, D, amp)
     """
