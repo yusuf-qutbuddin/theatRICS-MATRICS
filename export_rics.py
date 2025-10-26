@@ -359,6 +359,7 @@ def plot_rics_workflow(all_frames, corrected_stack, RICS_map, sd_map, filepath):
     plt.tight_layout()
     # Save as transparent svg
     fig.savefig(os.path.splitext(filepath)[0] + '.svg', dpi=300, transparent=True)
+    plt.close()
 
 
 def process_single_file(filepath):

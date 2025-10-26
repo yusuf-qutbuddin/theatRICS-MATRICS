@@ -391,7 +391,7 @@ def plot_fitting_workflow(image, model_diff, residual_diff, filepath):
     
     plt.tight_layout()
     fig.savefig(os.path.splitext(filepath)[0] + '.svg', dpi=300)
-
+    plt.close()
 
 
 def plot_rics_1D_fit(fast_axis_data, model, residual, px_size_um, filepath=None):
